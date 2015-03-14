@@ -1,0 +1,122 @@
+        rng = numpy.random.RandomState(13)
+        image_shape=(200, 1, 28, 28)
+        filter_shape=(20, 1, 5, 5)
+        poolsize=(2, 2)
+        layer0_input = x.reshape((batch_size, 1, 28, 28))
+        layer0_input = layer0_input.astype('float32')
+
+
+
+
+        fan_in = numpy.prod(filter_shape[1:])
+
+        fan_out = (filter_shape[0] * numpy.prod(filter_shape[2:]) /
+                   numpy.prod(poolsize))
+
+        #W UH 
+        # initialize weights with random weights
+        W_uh_bound = numpy.sqrt(6. / (fan_in + fan_out))
+        W_uh = theano.shared(numpy.asarray(rng.uniform(low=-W_uh_bound, high=W_uh_bound, size=filter_shape),
+            dtype=theano.config.floatX),borrow=True)
+        b_values = numpy.zeros((filter_shape[0],), dtype=theano.config.floatX)
+        b_h = theano.shared(value=b_values, borrow=True)
+        # convolve input feature maps with filters
+        conv_out = conv.conv2d(input=layer0_input,filters=W_uh,filter_shape=filter_shape,image_shape=image_shape)
+        # downsample each feature map individually, using maxpooling
+        pooled_out = downsample.max_pool_2d(input=conv_out,ds=poolsize,ignore_border=True)
+
+
+
+
+        #### Hidden Layer ####
+        # initialize weights with random weights
+        W_bound = numpy.sqrt(6. / (fan_in + fan_out))
+        W = theano.shared(numpy.asarray(rng.uniform(low=-W_bound, high=W_bound, size=filter_shape),
+            dtype=theano.config.floatX),borrow=True)
+
+        h0 = build_shared_zeros((batch_size, 1, 28, 28),name='h0')
+        # convolve input feature maps with filters
+        conv_out = conv.conv2d(input=h0,filters=W,filter_shape=filter_shape,image_shape=image_shape)
+        # downsample each feature map individually, using maxpooling
+        pool_out_h0 = downsample.max_pool_2d(input=conv_out,ds=poolsize,ignore_border=True)
+
+        h0 = build_shared_zeros(pool_out_h0.eval().shape,name='h0')
+
+
+        ############################
+        #### hidden to out, in recurrent layer. 
+        ############################
+
+        # filtering reduces the image size to (28-5+1 , 28-5+1) = (24, 24)
+        # maxpooling reduces this further to (24/2, 24/2) = (12, 12)
+        # 4D output tensor is thus of shape (batch_size, nkerns[0], 12, 12)
+        # image_shape=(batch_size, nkerns[0], 12, 12),
+        # filter_shape=(nkerns[1], nkerns[0], 5, 5)
+
+
+
+        """filter_shape2 = (50, 20, 5, 5)
+        secfan_in = numpy.prod(filter_shape2[1:])
+
+        secfan_out = (filter_shape2[0] * numpy.prod(filter_shape2[2:]) /
+                   numpy.prod(poolsize))
+
+
+        W_hy_bound = numpy.sqrt(6. / (secfan_in + secfan_out))
+        W_hy = theano.shared(numpy.asarray(rng.uniform(low=-W_hy_bound, high=W_hy_bound, size=(50, 20, 5, 5)),
+            dtype=theano.config.floatX),borrow=True)        
+
+        b_y_values = numpy.zeros(((50, 20, 5, 5)[0],), dtype=theano.config.floatX)
+        b_y = theano.shared(value=b_y_values, borrow=True)
+        """
+
+        W_hy_bound = numpy.sqrt(6. / (fan_in + fan_out))
+        W_hy = theano.shared(numpy.asarray(rng.uniform(low=-W_hy_bound, high=W_hy_bound, size=filter_shape),
+            dtype=theano.config.floatX),borrow=True)
+        b_y_values = numpy.zeros((filter_shape[0],), dtype=theano.config.floatX)
+        b_y = theano.shared(value=b_y_values, borrow=True)
+
+
+
+
+
+
+        params = [W_uh, W, W_hy, h0, b_h, b_y]
+
+
+        def recurrent_fn(u_t, h_tm1):
+
+            h_t = clipped_relu(u_t + \
+                              
+                  h_tm1 + \
+                  
+                  b_h.dimshuffle('x', 0, 'x', 'x'))
+            #first round is same size, 
+
+
+            # convolve input feature maps with filters
+            #conv_out = conv.conv2d(input=h_t,filters=W_hy,filter_shape=filter_shape,image_shape=image_shape)
+            # downsample each feature map individually, using maxpooling
+            #pooled_out = downsample.max_pool_2d(input=conv_out,ds=poolsize,ignore_border=True)
+
+
+            y_t = h_t + b_y.dimshuffle('x', 0, 'x', 'x')
+
+
+            #y_t = T.dot(h_t, W_hy) + b_y
+            return h_t, y_t
+
+
+
+
+        # Iteration over the first dimension of a tensor which is TIME in our case
+        # recurrent_fn doesn't use y in the computations, so we do not need y0 (None)
+        # scan returns updates too which we do not need. (_)
+        [h, output], _ = theano.scan(fn=recurrent_fn,
+                                               sequences = pooled_out,
+                                               outputs_info = [h0, None],
+                                               n_steps=pooled_out.shape[0])
+
+
+        def __repr__(self):
+        return "AHailMarryLayer"
